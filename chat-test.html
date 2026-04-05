@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Babblr — SignalR Test Client</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/7.0.5/signalr.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: system-ui, sans-serif; }
+    body { background: #f5f5f5; padding: 24px; }
+    h1 { font-size: 20px; font-weight: 600; margin-bottom: 20px; }
+    .card { background: white; border-radius: 10px; border: 1px solid #e0e0e0; padding: 20px; margin-bottom: 16px; }
+    label { font-size: 12px; font-weight: 500; color: #666; display: block; margin-bottom: 4px; }
+    input { width: 100%; padding: 8px 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px; margin-bottom: 10px; }
+    button { padding: 8px 18px; border-radius: 6px; border: none; font-size: 13px; font-weight: 500; cursor: pointer; margin-right: 8px; }
+    .btn-primary { background: #5C6BC0; color: white; }
+    .btn-secondary { background: #eee; color: #333; }
+    .btn-danger { background: #ef5350; color: white; }
+    #log { background: #1e1e1e; color: #d4d4d4; border-radius: 8px; padding: 16px; font-family: monospace; font-size: 13px; height: 300px; overflow-y: auto; }
+    .log-info { color: #4fc3f7; }
+    .log-success { color: #81c784; }
+    .log-error { color: #e57373; }
+    .log-msg { color: #fff176; }
+    .status { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; background: #ef5350; }
+    .status.connected { background: #81c784; }
+    #status-text { font-size: 13px; font-weight: 500; }
+  </style>
+</head>
+<body>
+  <h1>Babblr — SignalR Test Client</h1>
+
+  <!-- Connection -->
+  <div class="card">
+    <label>JWT Token (from /api/auth/login)</label>
+    <input type="text" id="token" placeholder="Paste your Bearer token here" />
+    <label>Hub URL</label>
+    <input type="text" id="hubUrl" value="https://localhost:5001/hubs/chat" />
+    <button class="btn-primary" onclick="connect()">Connect</button>
+    <button class="btn-danger" onclick="disconnect()">Disconnect</button>
+    <span style="margin-left:12px"><span class="status" id="status-dot"></span><span id="status-text">Disconnected</span></span>
+  </div>
+
+  <!-- Room actions -->
+  <div class="card">
+    <label>Room ID (Guid from POST /api/rooms)</label>
+    <input type="text" id="roomId" placeholder="e.g. 3fa85f64-5717-4562-b3fc-2c963f66afa6" />
+    <button class="btn-secondary" onclick="joinRoom()">Join Room</button>
+    <button class="btn-secondary" onclick="leaveRoom()">Leave Room</button>
+  </div>
+
+  <!-- Send message -->
+  <div class="card">
+    <label>Message</label>
+    <input type="text" id="messageContent" placeholder="Type a message..." />
+    <button class="btn-primary" onclick="sendMessage()">Send Message</button>
+    <button class="btn-secondary" onclick="typingStarted()">Typing Started</button>
+    <button class="btn-secondary" onclick="typingStopped()">Typing Stopped</button>
+  </div>
+
+  <!-- Log -->
+  <div class="card">
+    <label style="margin-bottom:8px">Event log</label>
+    <div id="log"></div>
+  </div>
+
+  <script>
+    let connection = null;
+
+    function log(msg, type = 'info') {
+      const el = document.getElementById('log');
+      const line = document.createElement('div');
+      line.className = `log-${type}`;
+      line.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+      el.appendChild(line);
+      el.scrollTop = el.scrollHeight;
+    }
+
+    async function connect() {
+      const token = document.getElementById('token').value.trim();
+      const hubUrl = document.getElementById('hubUrl').value.trim();
+
+      if (!token) { log('Paste your JWT token first.', 'error'); return; }
+
+      connection = new signalR.HubConnectionBuilder()
+        .withUrl(`${hubUrl}?access_token=${token}`)
+        .withAutomaticReconnect()
+        .configureLogging(signalR.LogLevel.Warning)
+        .build();
+
+      connection.on('ReceiveMessage', (data) => {
+        log(`MESSAGE from ${data.senderId}: "${data.content}" (room: ${data.roomId})`, 'msg');
+      });
+
+      connection.on('UserJoined', (data) => {
+        log(`USER JOINED — userId: ${data.userId} joined room: ${data.roomId}`, 'success');
+      });
+
+      connection.on('UserLeft', (data) => {
+        log(`USER LEFT — userId: ${data.userId} left room: ${data.roomId}`, 'info');
+      });
+
+      connection.on('UserTyping', (data) => {
+        log(`TYPING — userId: ${data.userId} is typing in room: ${data.roomId}`, 'info');
+      });
+
+      connection.on('UserStoppedTyping', (data) => {
+        log(`STOPPED TYPING — userId: ${data.userId}`, 'info');
+      });
+
+      connection.on('UserOffline', (userId) => {
+        log(`OFFLINE — userId: ${userId}`, 'info');
+      });
+
+      connection.on('Error', (msg) => {
+        log(`HUB ERROR — ${msg}`, 'error');
+      });
+
+      connection.onclose(() => {
+        document.getElementById('status-dot').className = 'status';
+        document.getElementById('status-text').textContent = 'Disconnected';
+        log('Connection closed.', 'error');
+      });
+
+      try {
+        await connection.start();
+        document.getElementById('status-dot').className = 'status connected';
+        document.getElementById('status-text').textContent = 'Connected';
+        log(`Connected! Connection ID: ${connection.connectionId}`, 'success');
+      } catch (err) {
+        log(`Connection failed: ${err.message}`, 'error');
+      }
+    }
+
+    async function disconnect() {
+      if (connection) await connection.stop();
+    }
+
+    async function joinRoom() {
+      const roomId = document.getElementById('roomId').value.trim();
+      if (!roomId) { log('Enter a Room ID first.', 'error'); return; }
+      try {
+        await connection.invoke('JoinRoom', roomId);
+        log(`Invoked JoinRoom for room: ${roomId}`, 'info');
+      } catch (err) {
+        log(`JoinRoom failed: ${err.message}`, 'error');
+      }
+    }
+
+    async function leaveRoom() {
+      const roomId = document.getElementById('roomId').value.trim();
+      if (!roomId) { log('Enter a Room ID first.', 'error'); return; }
+      try {
+        await connection.invoke('LeaveRoom', roomId);
+        log(`Invoked LeaveRoom for room: ${roomId}`, 'info');
+      } catch (err) {
+        log(`LeaveRoom failed: ${err.message}`, 'error');
+      }
+    }
+
+    async function sendMessage() {
+      const roomId = document.getElementById('roomId').value.trim();
+      const content = document.getElementById('messageContent').value.trim();
+      if (!roomId || !content) { log('Enter both Room ID and message.', 'error'); return; }
+      try {
+        await connection.invoke('SendMessage', { roomId, content });
+        log(`Invoked SendMessage: "${content}"`, 'info');
+      } catch (err) {
+        log(`SendMessage failed: ${err.message}`, 'error');
+      }
+    }
+
+    async function typingStarted() {
+      const roomId = document.getElementById('roomId').value.trim();
+      if (!roomId) { log('Enter a Room ID first.', 'error'); return; }
+      await connection.invoke('TypingStarted', roomId);
+    }
+
+    async function typingStopped() {
+      const roomId = document.getElementById('roomId').value.trim();
+      if (!roomId) { log('Enter a Room ID first.', 'error'); return; }
+      await connection.invoke('TypingStopped', roomId);
+    }
+  </script>
+</body>
+</html>

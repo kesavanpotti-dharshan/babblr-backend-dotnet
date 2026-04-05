@@ -117,4 +117,29 @@ public class ChatHub : Hub
 
     private string? GetUserId() =>
         Context.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+    public async Task EditMessage(Guid messageId, string roomId, string newContent)
+    {
+        var userId = GetUserId();
+        if (userId is null) return;
+
+        await Clients.Group(roomId).SendAsync("MessageEdited", new
+        {
+            MessageId = messageId,
+            NewContent = newContent,
+            EditedAt = DateTime.UtcNow
+        });
+    }
+
+    public async Task DeleteMessage(Guid messageId, string roomId)
+    {
+        var userId = GetUserId();
+        if (userId is null) return;
+
+        await Clients.Group(roomId).SendAsync("MessageDeleted", new
+        {
+            MessageId = messageId,
+            DeletedAt = DateTime.UtcNow
+        });
+    }
 }

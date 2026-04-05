@@ -12,6 +12,23 @@ using Microsoft.IdentityModel.Tokens;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// CORS
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("BabblrCors", policy =>
+    {
+        policy
+            .WithOrigins(
+                "http://localhost:3000",  // future React client
+                "https://localhost:3000",
+                "null"                    // allows file:// origins for local HTML testing
+            )
+            .AllowAnyHeader()
+            .AllowAnyMethod()
+            .AllowCredentials();          // required for SignalR
+    });
+});
+
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
@@ -108,6 +125,7 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
+app.UseCors("BabblrCors");
 app.UseHttpsRedirection();
 app.UseAuthentication();
 app.UseAuthorization();

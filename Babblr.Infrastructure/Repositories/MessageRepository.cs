@@ -18,4 +18,15 @@ public class MessageRepository : BaseRepository<Message>, IMessageRepository
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
             .ToListAsync();
+
+    public async Task<IEnumerable<Message>> SearchMessagesAsync(
+        Guid roomId, string query) =>
+        await _context.Messages
+            .Where(m => m.RoomId == roomId
+                && !m.IsDeleted
+                && m.Content.ToLower().Contains(query.ToLower()))
+            .Include(m => m.Sender)
+            .OrderByDescending(m => m.CreatedAt)
+            .Take(50)
+            .ToListAsync();
 }
