@@ -19,8 +19,8 @@ builder.Services.AddCors(options =>
     {
         policy
             .WithOrigins(
-                "http://localhost:3000",  // future React client
-                "https://localhost:3000",
+                "http://localhost:5173",  // future React client
+                "https://localhost:5174",
                 "null"                    // allows file:// origins for local HTML testing
             )
             .AllowAnyHeader()
