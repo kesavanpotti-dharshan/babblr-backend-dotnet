@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Babblr.Core.DTOs.Message;
 using Babblr.Core.Entities;
 using Babblr.Core.Interfaces.Repositories;
+using Babblr.Core.Interfaces.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
 
@@ -11,27 +12,36 @@ namespace Babblr.API.Hubs;
 public class ChatHub : Hub
 {
     private readonly IUnitOfWork _unitOfWork;
+    private readonly IPresenceTracker _presenceTracker;
 
-    public ChatHub(IUnitOfWork unitOfWork)
+    public ChatHub(IUnitOfWork unitOfWork, IPresenceTracker presenceTracker)
     {
         _unitOfWork = unitOfWork;
+        _presenceTracker = presenceTracker;
     }
 
     public override async Task OnConnectedAsync()
     {
-        var userId = Context.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        var userId = GetUserId();
         if (userId is not null)
+        {
+            await _presenceTracker.UserConnectedAsync(userId, Context.ConnectionId);
             await Groups.AddToGroupAsync(Context.ConnectionId, $"user_{userId}");
-
+            await Clients.Others.SendAsync("UserOnline", userId);
+        }
         await base.OnConnectedAsync();
     }
 
     public override async Task OnDisconnectedAsync(Exception? exception)
     {
-        var userId = Context.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        var userId = GetUserId();
         if (userId is not null)
-            await Clients.Others.SendAsync("UserOffline", userId);
-
+        {
+            await _presenceTracker.UserDisconnectedAsync(userId, Context.ConnectionId);
+            var isStillOnline = await _presenceTracker.IsUserOnlineAsync(userId);
+            if (!isStillOnline)
+                await Clients.Others.SendAsync("UserOffline", userId);
+        }
         await base.OnDisconnectedAsync(exception);
     }
 
@@ -91,33 +101,6 @@ public class ChatHub : Hub
         });
     }
 
-    public async Task TypingStarted(string roomId)
-    {
-        var userId = GetUserId();
-        if (userId is null) return;
-
-        await Clients.OthersInGroup(roomId).SendAsync("UserTyping", new
-        {
-            UserId = userId,
-            RoomId = roomId
-        });
-    }
-
-    public async Task TypingStopped(string roomId)
-    {
-        var userId = GetUserId();
-        if (userId is null) return;
-
-        await Clients.OthersInGroup(roomId).SendAsync("UserStoppedTyping", new
-        {
-            UserId = userId,
-            RoomId = roomId
-        });
-    }
-
-    private string? GetUserId() =>
-        Context.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-
     public async Task EditMessage(Guid messageId, string roomId, string newContent)
     {
         var userId = GetUserId();
@@ -142,4 +125,37 @@ public class ChatHub : Hub
             DeletedAt = DateTime.UtcNow
         });
     }
+
+    public async Task TypingStarted(string roomId)
+    {
+        var userId = GetUserId();
+        if (userId is null) return;
+
+        await Clients.OthersInGroup(roomId).SendAsync("UserTyping", new
+        {
+            UserId = userId,
+            RoomId = roomId
+        });
+    }
+
+    public async Task TypingStopped(string roomId)
+    {
+        var userId = GetUserId();
+        if (userId is null) return;
+
+        await Clients.OthersInGroup(roomId).SendAsync("UserStoppedTyping", new
+        {
+            UserId = userId,
+            RoomId = roomId
+        });
+    }
+
+    public async Task GetOnlineUsers()
+    {
+        var onlineUsers = await _presenceTracker.GetOnlineUsersAsync();
+        await Clients.Caller.SendAsync("OnlineUsers", onlineUsers);
+    }
+
+    private string? GetUserId() =>
+        Context.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
 }

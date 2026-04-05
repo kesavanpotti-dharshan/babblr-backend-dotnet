@@ -117,6 +117,12 @@ builder.Services.AddScoped<IAuthService, AuthService>();
 // SignalR
 builder.Services.AddSignalR();
 
+// Presence tracking (swap InMemory for Redis later)
+builder.Services.AddSingleton<IPresenceTracker, InMemoryPresenceTracker>();
+
+// Storage
+builder.Services.AddScoped<IStorageService, AzureBlobStorageService>();
+
 var app = builder.Build();
 
 if (app.Environment.IsDevelopment())
