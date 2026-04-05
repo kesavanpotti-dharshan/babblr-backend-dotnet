@@ -138,5 +138,11 @@ app.UseAuthorization();
 app.MapControllers();
 
 app.MapHub<Babblr.API.Hubs.ChatHub>("/hubs/chat");
+app.MapGet("/health", () => Results.Ok(new
+{
+    status = "healthy",
+    app = "Babblr API",
+    timestamp = DateTime.UtcNow
+}));
 
 app.Run();
