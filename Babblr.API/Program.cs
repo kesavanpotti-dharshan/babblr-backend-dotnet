@@ -19,7 +19,8 @@ builder.Services.AddCors(options =>
     {
         policy
             .WithOrigins(
-                "http://localhost:3000",  // future React client
+                "http://localhost:3000", 
+                "https://babblr-chat.vercel.app",
                 "https://ais-dev-dieljdiovzajocysiaqasu-41955042979.us-east5.run.app",
                 "null"                    // allows file:// origins for local HTML testing
             )
