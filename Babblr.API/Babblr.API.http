@@ -1,0 +1,6 @@
+@Babblr.API_HostAddress = http://localhost:5174
+
+GET {{Babblr.API_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

@@ -52,3 +52,17 @@ CodeCoverage/
 *.VisualState.xml
 TestResult.xml
 nunit-*.xml
+
+# User secrets and local config
+appsettings.Development.json
+appsettings.*.json
+
+# .NET build output
+bin/
+obj/
+
+# VS Code
+.vscode/
+
+# OS files
+.DS_Store
