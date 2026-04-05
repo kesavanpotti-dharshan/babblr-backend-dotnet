@@ -20,4 +20,10 @@ public class RoomRepository : BaseRepository<Room>, IRoomRepository
             .Include(r => r.Members)
             .ThenInclude(m => m.User)
             .FirstOrDefaultAsync(r => r.Id == roomId);
+    public async Task<IEnumerable<Room>> GetPublicRoomsAsync() =>
+        await _context.Rooms
+        .Where(r => !r.IsPrivate)
+        .Include(r => r.Members)
+        .OrderByDescending(r => r.CreatedAt)
+        .ToListAsync();
 }
