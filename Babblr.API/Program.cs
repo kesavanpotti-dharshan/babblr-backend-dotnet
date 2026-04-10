@@ -1,4 +1,5 @@
 using System.Text;
+using Babblr.API.Middleware;
 using Babblr.Core.Entities;
 using Babblr.Core.Interfaces.Repositories;
 using Babblr.Core.Interfaces.Services;
@@ -126,15 +127,22 @@ builder.Services.AddScoped<IStorageService, AzureBlobStorageService>();
 
 var app = builder.Build();
 
+app.UseMiddleware<ExceptionHandlingMiddleware>();
+
 app.UseSwagger();
 app.UseSwaggerUI();
 
 app.UseCors("BabblrCors");
-app.UseHttpsRedirection();
+// Only redirect to HTTPS in production
+if (!app.Environment.IsDevelopment())
+{
+    app.UseHttpsRedirection();
+}
+//app.UseHttpsRedirection();
 app.UseAuthentication();
 app.UseAuthorization();
-app.MapControllers();
 
+app.MapControllers();
 app.MapHub<Babblr.API.Hubs.ChatHub>("/hubs/chat");
 app.MapGet("/health", () => Results.Ok(new
 {
@@ -142,5 +150,21 @@ app.MapGet("/health", () => Results.Ok(new
     app = "Babblr API",
     timestamp = DateTime.UtcNow
 }));
+app.MapFallback(async context =>
+{
+    context.Response.StatusCode = StatusCodes.Status404NotFound;
+    context.Response.ContentType = "application/problem+json";
+
+    var problemDetails = new
+    {
+        type = "https://httpstatuses.io/404",
+        title = "Resource not found",
+        status = 404,
+        detail = $"The endpoint '{context.Request.Method} {context.Request.Path}' does not exist.",
+        traceId = context.TraceIdentifier
+    };
+
+    await context.Response.WriteAsJsonAsync(problemDetails);
+});
 
 app.Run();
