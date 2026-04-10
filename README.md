@@ -1,28 +1,25 @@
-# Babblr 💬
+# Babblr — Backend API
 
-A high-performance, real-time messaging API built with **ASP.NET Core 8** and **SignalR**, following **Clean Architecture** principles. Built as a portfolio project to demonstrate production-grade .NET backend development.
+A high-performance, real-time messaging API built with **ASP.NET Core 8** following **Clean Architecture** principles. Deployed on Azure App Service with a GitHub Actions CI/CD pipeline.
 
----
-
-## Live Demo
-
-> API is deployed on **Azure App Service**.  
-> Swagger UI available at the live URL — contact me for access.
+> **Live API:** https://babblr-api.azurewebsites.net/swagger  
+> **Frontend:** https://babblr-chat.vercel.app  
+> **Frontend repo:** https://github.com/kesavanpotti-dharshan/babblr-frontend-react
 
 ---
 
 ## Features
 
-- **Real-time messaging** — bidirectional WebSocket communication via SignalR
-- **JWT authentication** — stateless, secure register and login flow
-- **Room management** — create public or private rooms, join and leave dynamically
-- **Message history** — paginated retrieval of past messages per room
-- **Message actions** — edit and soft-delete messages with real-time broadcast to room members
-- **Message search** — full-text search across messages within a room
-- **File uploads** — upload images and documents via Azure Blob Storage
-- **Presence tracking** — online/offline user status with multi-tab awareness
-- **Typing indicators** — real-time "user is typing" events broadcast to room members
-- **User profiles** — view and update display name and avatar URL
+- Real-time bidirectional messaging via **ASP.NET Core SignalR**
+- Stateless **JWT authentication** with ASP.NET Core Identity
+- **Room management** — create, join, leave, and discover public rooms
+- **Message history** — paginated retrieval with load more support
+- **Message actions** — edit, soft delete, and full-text search
+- **File uploads** — images and documents via Azure Blob Storage
+- **Presence tracking** — online/offline status with multi-tab awareness
+- **Typing indicators** — real-time broadcast to room members
+- **Global error handling** — RFC 7807 ProblemDetails responses
+- **Health check** endpoint for Azure App Service monitoring
 
 ---
 
@@ -32,29 +29,29 @@ Babblr follows **Clean Architecture** with a strict inward dependency rule — o
 
 ```
 Babblr.API               → Host, controllers, SignalR hub, middleware
-Babblr.Core              → Domain entities, interfaces, DTOs (no external dependencies)
+Babblr.Core              → Domain entities, interfaces, DTOs (zero external dependencies)
 Babblr.Infrastructure    → EF Core, repositories, services, Azure integrations
 Babblr.Shared            → Constants, helpers, error types
-Babblr.Tests             → xUnit test project
+Babblr.Tests             → xUnit unit tests
 ```
 
 ### Dependency flow
 
 ```
-API → Core ← Infrastructure
- ↑                 ↑
- └──── Shared ─────┘
+API  →  Core  ←  Infrastructure
+ ↑                     ↑
+ └────── Shared ────────┘
 ```
 
-`Babblr.Core` has zero external NuGet dependencies. All infrastructure concerns — database, storage, identity — are hidden behind interfaces defined in Core and implemented in Infrastructure.
+`Babblr.Core` has zero external NuGet dependencies. All infrastructure concerns are hidden behind interfaces defined in Core and implemented in Infrastructure.
 
-### Key patterns used
+### Key patterns
 
 **Repository pattern** — controllers and services never touch `DbContext` directly. All data access goes through typed repository interfaces (`IRoomRepository`, `IMessageRepository`, `IRoomMemberRepository`).
 
-**Unit of Work** — all repositories share a single `DbContext` instance per request. `SaveChangesAsync()` commits everything atomically, preventing partial writes.
+**Unit of Work** — all repositories share a single `DbContext` per request. `SaveChangesAsync()` commits everything atomically.
 
-**Interface-driven services** — `IPresenceTracker`, `IStorageService`, `ITokenService`, and `IAuthService` are all defined in Core. Swapping implementations (e.g. `InMemoryPresenceTracker` → `RedisPresenceTracker`) is a single DI registration change in `Program.cs`.
+**Interface-driven services** — `IPresenceTracker`, `IStorageService`, `ITokenService`, and `IAuthService` are defined in Core. Swapping implementations is a single DI registration change in `Program.cs`. For example, swapping `InMemoryPresenceTracker` for `RedisPresenceTracker` requires changing one line.
 
 ---
 
@@ -72,6 +69,7 @@ API → Core ← Infrastructure
 | Hosting | Azure App Service (Linux) |
 | CI/CD | GitHub Actions |
 | API Docs | Swagger / Swashbuckle |
+| Testing | xUnit + Moq + FluentAssertions |
 
 ---
 
@@ -89,6 +87,7 @@ Babblr/
 │   ├── Hubs/
 │   │   └── ChatHub.cs
 │   ├── Middleware/
+│   │   └── ExceptionHandlingMiddleware.cs
 │   └── Program.cs
 ├── Babblr.Core/
 │   ├── Entities/
@@ -128,12 +127,19 @@ Babblr/
 │       ├── TokenService.cs
 │       ├── AzureBlobStorageService.cs
 │       ├── InMemoryPresenceTracker.cs
-│       └── RedisPresenceTracker.cs (stub — ready for Upstash/Azure Cache)
+│       └── RedisPresenceTracker.cs     ← stub, ready to wire up
 ├── Babblr.Shared/
-│   ├── Constants/
-│   ├── Helpers/
-│   └── Errors/
-└── Babblr.Tests/
+├── Babblr.Tests/
+│   └── Unit/
+│       ├── Services/
+│       │   ├── TokenServiceTests.cs
+│       │   ├── AuthServiceTests.cs
+│       │   └── PresenceTrackerTests.cs
+│       └── Controllers/
+│           └── AuthControllerTests.cs
+└── .github/
+    └── workflows/
+        └── deploy.yml
 ```
 
 ---
@@ -153,26 +159,29 @@ Babblr/
 | POST | `/api/rooms` | Create a new room | Yes |
 | GET | `/api/rooms` | Get rooms for current user | Yes |
 | GET | `/api/rooms/{roomId}` | Get room details | Yes |
+| GET | `/api/rooms/discover` | Get all public rooms | Yes |
+| POST | `/api/rooms/{roomId}/join` | Join a public room | Yes |
+| POST | `/api/rooms/{roomId}/leave` | Leave a room | Yes |
 
 ### Messages
 | Method | Endpoint | Description | Auth |
 |---|---|---|---|
-| GET | `/api/messages/room/{roomId}` | Get paginated message history | Yes |
+| GET | `/api/messages/room/{roomId}` | Paginated message history | Yes |
 | PUT | `/api/messages/{messageId}` | Edit a message | Yes |
 | DELETE | `/api/messages/{messageId}` | Soft delete a message | Yes |
-| GET | `/api/messages/room/{roomId}/search?q=` | Search messages in a room | Yes |
+| GET | `/api/messages/room/{roomId}/search?q=` | Search messages | Yes |
 
 ### Users
 | Method | Endpoint | Description | Auth |
 |---|---|---|---|
 | GET | `/api/users/me` | Get current user profile | Yes |
 | PUT | `/api/users/me` | Update display name / avatar | Yes |
-| GET | `/api/users/online` | Get list of online users | Yes |
+| GET | `/api/users/online` | Get online users | Yes |
 
 ### Uploads
 | Method | Endpoint | Description | Auth |
 |---|---|---|---|
-| POST | `/api/uploads` | Upload a file to Azure Blob Storage | Yes |
+| POST | `/api/uploads` | Upload file to Azure Blob Storage | Yes |
 
 ### Health
 | Method | Endpoint | Description | Auth |
@@ -183,40 +192,39 @@ Babblr/
 
 ## SignalR Hub — `/hubs/chat`
 
-Connect with a JWT token passed as a query string parameter:
-
+Connect with JWT token as query string:
 ```
-wss://your-api/hubs/chat?access_token=YOUR_JWT_TOKEN
+wss://babblr-api.azurewebsites.net/hubs/chat?access_token=YOUR_JWT
 ```
 
-### Client → Server events
+### Client → Server
 
 | Method | Parameters | Description |
 |---|---|---|
 | `JoinRoom` | `roomId: string` | Join a chat room group |
 | `LeaveRoom` | `roomId: string` | Leave a chat room group |
-| `SendMessage` | `{ roomId, content }` | Send a message to a room |
-| `EditMessage` | `messageId, roomId, newContent` | Broadcast message edit to room |
-| `DeleteMessage` | `messageId, roomId` | Broadcast message deletion to room |
-| `TypingStarted` | `roomId: string` | Notify room members you are typing |
-| `TypingStopped` | `roomId: string` | Notify room members you stopped typing |
-| `GetOnlineUsers` | — | Request current online user list |
+| `SendMessage` | `{ roomId, content }` | Send a message |
+| `EditMessage` | `messageId, roomId, newContent` | Broadcast message edit |
+| `DeleteMessage` | `messageId, roomId` | Broadcast message deletion |
+| `TypingStarted` | `roomId: string` | Notify typing started |
+| `TypingStopped` | `roomId: string` | Notify typing stopped |
+| `GetOnlineUsers` | — | Request online user list |
 
-### Server → Client events
+### Server → Client
 
 | Event | Payload | Description |
 |---|---|---|
-| `ReceiveMessage` | `{ messageId, content, senderId, roomId, sentAt }` | New message received |
-| `MessageEdited` | `{ messageId, newContent, editedAt }` | Message was edited |
-| `MessageDeleted` | `{ messageId, deletedAt }` | Message was soft deleted |
-| `UserJoined` | `{ userId, roomId, joinedAt }` | User joined the room |
-| `UserLeft` | `{ userId, roomId }` | User left the room |
+| `ReceiveMessage` | `{ messageId, content, senderId, roomId, sentAt }` | New message |
+| `MessageEdited` | `{ messageId, newContent, editedAt }` | Message edited |
+| `MessageDeleted` | `{ messageId, deletedAt }` | Message deleted |
+| `UserJoined` | `{ userId, roomId, joinedAt }` | User joined room |
+| `UserLeft` | `{ userId, roomId }` | User left room |
 | `UserOnline` | `userId: string` | User came online |
 | `UserOffline` | `userId: string` | User went offline |
 | `UserTyping` | `{ userId, roomId }` | User is typing |
 | `UserStoppedTyping` | `{ userId, roomId }` | User stopped typing |
-| `OnlineUsers` | `string[]` | List of currently online user IDs |
-| `Error` | `message: string` | Hub error message |
+| `OnlineUsers` | `string[]` | List of online user IDs |
+| `Error` | `message: string` | Hub error |
 
 ---
 
@@ -224,17 +232,17 @@ wss://your-api/hubs/chat?access_token=YOUR_JWT_TOKEN
 
 ### Prerequisites
 - .NET 8 SDK
-- Docker (optional, for local PostgreSQL)
-- A Supabase account (free) or local PostgreSQL instance
+- PostgreSQL (or a free Supabase account)
+- Azure Storage account (or use Azurite for local emulation)
 
 ### Setup
 
 ```bash
 # Clone the repo
-git clone https://github.com/kesavanpotti-dharshan/Babblr.git
-cd Babblr
+git clone https://github.com/kesavanpotti-dharshan/babblr-backend-dotnet.git
+cd babblr-backend-dotnet
 
-# Set up user secrets
+# Set user secrets
 cd Babblr.API
 dotnet user-secrets set "ConnectionStrings:DefaultConnection" "YOUR_POSTGRES_CONNECTION_STRING"
 dotnet user-secrets set "Jwt:Key" "your-secret-key-min-32-characters"
@@ -243,59 +251,61 @@ dotnet user-secrets set "Jwt:Audience" "babblr-client"
 dotnet user-secrets set "Azure:BlobStorageConnection" "YOUR_AZURE_STORAGE_CONNECTION_STRING"
 dotnet user-secrets set "Azure:BlobContainerName" "babblr-uploads"
 
-# Run migrations
+# Run migrations (uses direct connection, not pooler)
 dotnet ef database update --project ../Babblr.Infrastructure/Babblr.Infrastructure.csproj
 
 # Run the API
-dotnet run
+dotnet run --launch-profile http
 ```
 
-Open `https://localhost:{PORT}/swagger` to explore the API.
+Open `http://localhost:5174/swagger` to explore the API.
+
+### Running tests
+
+```bash
+dotnet test --verbosity normal
+```
 
 ---
 
 ## CI/CD Pipeline
 
-Every push to `main` triggers a GitHub Actions workflow that:
-
-1. Restores NuGet packages
-2. Builds in Release mode
-3. Runs the test suite
-4. Publishes the API
-5. Deploys to Azure App Service
+Every push to `main` triggers a GitHub Actions workflow:
 
 ```
-push to main → Build → Test → Publish → Deploy → Live on Azure
+push to main → Restore → Build → Test → Publish → Deploy → Live on Azure
 ```
+
+The pipeline only deploys on push to `main` — pull requests run build and tests only.
 
 ---
 
 ## Design Decisions
 
-**Why Clean Architecture?**  
-Keeps business logic completely independent of infrastructure. The entire `Babblr.Core` project can be tested without a database, HTTP server, or any Azure service running.
+**Why Clean Architecture?**
+Business logic is completely independent of infrastructure. The entire `Babblr.Core` project can be tested without a database, HTTP server, or Azure service.
 
-**Why SignalR over raw WebSockets?**  
-SignalR handles connection negotiation, fallback transports, reconnection logic, and group management out of the box. It also integrates natively with ASP.NET Core's dependency injection and authentication pipeline.
+**Why SignalR over raw WebSockets?**
+SignalR handles connection negotiation, fallback transports, reconnection, and group management out of the box. It integrates natively with ASP.NET Core's DI and authentication pipeline.
 
-**Why soft delete for messages?**  
+**Why soft delete for messages?**
 Hard deletes create gaps in message history that break pagination and conversation context. Soft deletes preserve the timeline while hiding content — the same approach used by Slack and Discord.
 
-**Why in-memory presence tracker with a Redis interface?**  
-Presence data is ephemeral and doesn't need to survive restarts. The `IPresenceTracker` interface means swapping to Redis (for multi-instance scale-out) is a single line change in `Program.cs` with zero changes to business logic.
+**Why in-memory presence with a Redis interface?**
+Presence data is ephemeral. The `IPresenceTracker` interface means swapping to Redis for multi-instance scale-out is a single line change in `Program.cs` with zero changes to business logic.
 
-**Why Supabase for PostgreSQL?**  
-Free hosted PostgreSQL with a built-in dashboard, connection pooler, and the same Npgsql driver used in production Azure deployments. Zero infrastructure overhead during development.
+**Why Supabase for PostgreSQL?**
+Free hosted PostgreSQL with a connection pooler, dashboard, and the same Npgsql driver used in production Azure deployments. Zero infrastructure overhead during development.
 
 ---
 
 ## Roadmap
 
-- [ ] Unit and integration tests (xUnit + Testcontainers)
 - [ ] Redis presence tracking (Upstash free tier)
 - [ ] Refresh token rotation
 - [ ] Rate limiting per user per room
-- [ ] React frontend client
+- [ ] Integration tests with Testcontainers
+- [ ] Serilog structured logging with Azure Application Insights
 - [ ] Direct messaging between users
 - [ ] Message reactions
 
@@ -303,6 +313,5 @@ Free hosted PostgreSQL with a built-in dashboard, connection pooler, and the sam
 
 ## Author
 
-**Dharshan** — .NET backend developer  
-[GitHub](https://github.com/kesavanpotti-dharshan) · [LinkedIn](https://linkedin.com/in/dharshankesavan/)
-```
+**Dharshan Kesavanpotti** — .NET backend developer based in Manchester  
+[GitHub](https://github.com/kesavanpotti-dharshan) · [LinkedIn](https://www.linkedin.com/in/dharshankesavan/)
