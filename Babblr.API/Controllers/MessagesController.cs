@@ -20,14 +20,19 @@ public class MessagesController : ControllerBase
 
     [HttpGet("room/{roomId}")]
     public async Task<IActionResult> GetMessages(
-        Guid roomId,
-        [FromQuery] int page = 1,
-        [FromQuery] int pageSize = 20)
+    Guid roomId,
+    [FromQuery] int page = 1,
+    [FromQuery] int pageSize = 20)
     {
         if (pageSize > 50) pageSize = 50;
 
         var messages = await _unitOfWork.Messages
             .GetMessagesByRoomIdAsync(roomId, page, pageSize);
+
+        var totalCount = await _unitOfWork.Messages
+            .GetMessageCountByRoomIdAsync(roomId);
+
+        var totalPages = (int)Math.Ceiling((double)totalCount / pageSize);
 
         var response = messages.Select(m => new MessageResponseDto
         {
@@ -40,7 +45,18 @@ public class MessagesController : ControllerBase
             IsEdited = m.IsEdited
         });
 
-        return Ok(response);
+        return Ok(new
+        {
+            messages = response,
+            pagination = new
+            {
+                page,
+                pageSize,
+                totalCount,
+                totalPages,
+                hasMore = page < totalPages
+            }
+        });
     }
 
     [HttpPut("{messageId}")]

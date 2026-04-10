@@ -19,6 +19,10 @@ public class MessageRepository : BaseRepository<Message>, IMessageRepository
             .Take(pageSize)
             .ToListAsync();
 
+    public async Task<int> GetMessageCountByRoomIdAsync(Guid roomId) =>
+        await _context.Messages
+            .CountAsync(m => m.RoomId == roomId && !m.IsDeleted);
+
     public async Task<IEnumerable<Message>> SearchMessagesAsync(
         Guid roomId, string query) =>
         await _context.Messages
