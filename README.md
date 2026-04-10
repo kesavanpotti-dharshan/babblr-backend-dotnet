@@ -313,5 +313,5 @@ Free hosted PostgreSQL with a connection pooler, dashboard, and the same Npgsql 
 
 ## Author
 
-**Dharshan Kesavanpotti** — .NET backend developer based in Manchester  
+**Dharshan Kesavanpotti** — .NET backend developer based in USA  
 [GitHub](https://github.com/kesavanpotti-dharshan) · [LinkedIn](https://www.linkedin.com/in/dharshankesavan/)
